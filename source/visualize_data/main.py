@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QComboBox, QPushButton, QSpinBox, QListWidget
+    QLabel, QComboBox, QPushButton, QSpinBox, QListWidget, QToolButton
 )
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -75,10 +75,20 @@ class ECGViewer(QWidget):
         self.plot_button = QPushButton("Plot Selected Labels")
         self.plot_button.clicked.connect(self.plot_selected_labels)
 
+        self.prev_button = QToolButton()
+        self.prev_button.setText("←")
+        self.prev_button.clicked.connect(self.go_to_previous_sample)
+
+        self.next_button = QToolButton()
+        self.next_button.setText("→")
+        self.next_button.clicked.connect(self.go_to_next_sample)
+
         control_layout.addWidget(QLabel("Dataset:"))
         control_layout.addWidget(self.dataset_selector)
         control_layout.addWidget(QLabel("Sample Index:"))
         control_layout.addWidget(self.index_spinner)
+        control_layout.addWidget(self.prev_button)
+        control_layout.addWidget(self.next_button)
         control_layout.addWidget(self.plot_button)
         layout.addLayout(control_layout)
 
@@ -158,6 +168,7 @@ class ECGViewer(QWidget):
         idx = self.sample_selector.currentIndex() - 1
         if 0 <= idx < len(self.available_samples):
             self.index_spinner.setValue(self.available_samples[idx])
+            self.plot_selected_labels()
 
     def decode_multilabel(self, row, names):
         return [names[i] for i, val in enumerate(row.iloc[1:].values) if val == 1]
@@ -172,11 +183,6 @@ class ECGViewer(QWidget):
         super_labels = self.decode_multilabel(super_row, self.super_label_names)
         sub_labels = self.decode_multilabel(sub_row, self.sub_label_names)
 
-        if self.selected_super_label not in super_labels:
-            return
-        if self.selected_sub_labels and not any(lbl in sub_labels for lbl in self.selected_sub_labels):
-            return
-
         self.figure.clear()
         T, C = data.shape
         for i in range(C):
@@ -190,6 +196,28 @@ class ECGViewer(QWidget):
         self.figure.suptitle(title, fontsize=16)
         self.figure.tight_layout(rect=[0, 0.03, 1, 0.95])
         self.canvas.draw()
+
+    def go_to_previous_sample(self):
+        self.update_available_samples()
+        current_idx = self.index_spinner.value()
+        try:
+            current_pos = self.available_samples.index(current_idx)
+            if current_pos > 0:
+                self.index_spinner.setValue(self.available_samples[current_pos - 1])
+                self.plot_selected_labels()
+        except ValueError:
+            pass
+
+    def go_to_next_sample(self):
+        self.update_available_samples()
+        current_idx = self.index_spinner.value()
+        try:
+            current_pos = self.available_samples.index(current_idx)
+            if current_pos < len(self.available_samples) - 1:
+                self.index_spinner.setValue(self.available_samples[current_pos + 1])
+                self.plot_selected_labels()
+        except ValueError:
+            pass
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
