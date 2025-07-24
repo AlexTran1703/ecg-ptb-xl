@@ -158,6 +158,10 @@ class ECGViewer(QWidget):
         self.figure = Figure(figsize=(12, 8))
         self.canvas = FigureCanvas(self.figure)
         layout.addWidget(self.canvas)
+        
+        self.fft_button = QPushButton("FFT Transform")
+        self.fft_button.clicked.connect(self.plot_fft_transform)
+        control_layout.addWidget(self.fft_button)
 
     def update_biostatistics(self):
         headers = ["Class Label"] + [f"{ds.upper()} (Super)" for ds in dataset_files] + [f"{ds.upper()} (Sub)" for ds in dataset_files]
@@ -273,6 +277,37 @@ class ECGViewer(QWidget):
             col = i // rows
             ax = self.figure.add_subplot(rows, cols, row * cols + col + 1)
             ax.plot(data[:, i], linewidth=0.8)
+            ax.set_title(f"Lead {lead_dict[i]}", fontsize=12)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        title = f"True Super: {', '.join(super_labels)} | True Sub: {', '.join(sub_labels)}"
+        self.figure.suptitle(title, fontsize=16)
+        self.figure.tight_layout(rect=[0, 0.03, 1, 0.95])
+        self.canvas.draw()
+        
+    def plot_fft_transform(self):
+        idx = self.index_spinner.value()
+        data = self.current_data[idx]
+
+        super_row = self.super_classes[self.current_dataset_name].iloc[idx]
+        sub_row = self.sub_classes[self.current_dataset_name].iloc[idx]
+
+        super_labels = self.decode_multilabel(super_row, self.super_label_names)
+        sub_labels = self.decode_multilabel(sub_row, self.sub_label_names)
+
+        self.figure.clear()
+        T, C = data.shape
+        fft_data = np.fft.fft(data, axis=0)[:data.shape[0] // 2, :].squeeze()
+        freqs = np.fft.fftfreq(T, d=1/T)[:T // 2]
+        magnitude = np.abs(fft_data).squeeze()
+        for i in range(C):
+            rows, cols = 4, 3
+            row = i % rows
+            col = i // rows
+            ax = self.figure.add_subplot(rows, cols, row * cols + col + 1)
+            freqs = np.fft.fftfreq(T).squeeze()
+            ax.plot(magnitude[:, i], linewidth=0.8)
             ax.set_title(f"Lead {lead_dict[i]}", fontsize=12)
             ax.set_xticks([])
             ax.set_yticks([])
