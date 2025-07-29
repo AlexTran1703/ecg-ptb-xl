@@ -11,6 +11,7 @@ from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt5.QtGui import QColor
+import scipy.signal as signal
 
 dataset_colors = {
     'train': QColor("#d0f5d8"),  # Light green
@@ -72,6 +73,9 @@ class ECGViewer(QWidget):
         self.selected_super_label = None
         self.selected_sub_labels = []
         self.available_samples = []
+        
+        # To track whether to show filtered or raw signal
+        self.show_filtered = False
 
         self.init_ui()
 
@@ -134,6 +138,12 @@ class ECGViewer(QWidget):
         control_layout.addWidget(self.prev_button)
         control_layout.addWidget(self.next_button)
         control_layout.addWidget(self.plot_button)
+        layout.addLayout(control_layout)
+        
+        self.toggle_filter_button = QPushButton("Toggle Filtered/Raw")
+        self.toggle_filter_button.clicked.connect(self.toggle_filtered)
+        control_layout.addWidget(self.toggle_filter_button)
+
         layout.addLayout(control_layout)
 
         layout.addWidget(QLabel("Select Super Class:"))
@@ -263,6 +273,9 @@ class ECGViewer(QWidget):
         idx = self.index_spinner.value()
         data = self.current_data[idx]
 
+        if self.show_filtered:
+            data = self.filter_signal(data)  # Apply filtering if toggled
+
         super_row = self.super_classes[self.current_dataset_name].iloc[idx]
         sub_row = self.sub_classes[self.current_dataset_name].iloc[idx]
 
@@ -281,8 +294,9 @@ class ECGViewer(QWidget):
             ax.set_xticks([])
             ax.set_yticks([])
 
+        signal_type = "Filtered Signal" if self.show_filtered else "Raw Signal"
         title = f"True Super: {', '.join(super_labels)} | True Sub: {', '.join(sub_labels)}"
-        self.figure.suptitle(title, fontsize=16)
+        self.figure.suptitle(f"{title}, {signal_type}", fontsize=16)
         self.figure.tight_layout(rect=[0, 0.03, 1, 0.95])
         self.canvas.draw()
         
@@ -327,7 +341,18 @@ class ECGViewer(QWidget):
                 self.plot_selected_labels()
         except ValueError:
             pass
-
+    
+    def toggle_filtered(self):
+        self.show_filtered = not self.show_filtered
+        self.plot_selected_labels()
+    
+    def filter_signal(self, signal_data, fs=100, lowcut=0.5, highcut=45.0):
+        nyquist = 0.5 * fs
+        low = lowcut / nyquist
+        high = highcut / nyquist
+        b, a = signal.butter(4, [low, high], btype='band')
+        return signal.filtfilt(b, a, signal_data, axis=0)    
+        
     def go_to_next_sample(self):
         self.update_available_samples()
         current_idx = self.index_spinner.value()
