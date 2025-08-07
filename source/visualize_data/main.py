@@ -11,6 +11,7 @@ from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt5.QtGui import QColor
+import scipy.signal as signal
 
 dataset_colors = {
     'train': QColor("#d0f5d8"),  # Light green
@@ -72,6 +73,9 @@ class ECGViewer(QWidget):
         self.selected_super_label = None
         self.selected_sub_labels = []
         self.available_samples = []
+        
+        # To track whether to show filtered or raw signal
+        self.show_filtered = False
 
         self.init_ui()
 
@@ -135,6 +139,12 @@ class ECGViewer(QWidget):
         control_layout.addWidget(self.next_button)
         control_layout.addWidget(self.plot_button)
         layout.addLayout(control_layout)
+        
+        self.toggle_filter_button = QPushButton("Toggle Filtered/Raw")
+        self.toggle_filter_button.clicked.connect(self.toggle_filtered)
+        control_layout.addWidget(self.toggle_filter_button)
+
+        layout.addLayout(control_layout)
 
         layout.addWidget(QLabel("Select Super Class:"))
         self.super_label_selector = QComboBox()
@@ -158,6 +168,10 @@ class ECGViewer(QWidget):
         self.figure = Figure(figsize=(12, 8))
         self.canvas = FigureCanvas(self.figure)
         layout.addWidget(self.canvas)
+        
+        self.fft_button = QPushButton("FFT Transform")
+        self.fft_button.clicked.connect(self.plot_fft_transform)
+        control_layout.addWidget(self.fft_button)
 
     def update_biostatistics(self):
         headers = ["Class Label"] + [f"{ds.upper()} (Super)" for ds in dataset_files] + [f"{ds.upper()} (Sub)" for ds in dataset_files]
@@ -259,6 +273,9 @@ class ECGViewer(QWidget):
         idx = self.index_spinner.value()
         data = self.current_data[idx]
 
+        if self.show_filtered:
+            data = self.filter_signal(data)  # Apply filtering if toggled
+
         super_row = self.super_classes[self.current_dataset_name].iloc[idx]
         sub_row = self.sub_classes[self.current_dataset_name].iloc[idx]
 
@@ -273,6 +290,38 @@ class ECGViewer(QWidget):
             col = i // rows
             ax = self.figure.add_subplot(rows, cols, row * cols + col + 1)
             ax.plot(data[:, i], linewidth=0.8)
+            ax.set_title(f"Lead {lead_dict[i]}", fontsize=12)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        signal_type = "Filtered Signal" if self.show_filtered else "Raw Signal"
+        title = f"True Super: {', '.join(super_labels)} | True Sub: {', '.join(sub_labels)}"
+        self.figure.suptitle(f"{title}, {signal_type}", fontsize=16)
+        self.figure.tight_layout(rect=[0, 0.03, 1, 0.95])
+        self.canvas.draw()
+        
+    def plot_fft_transform(self):
+        idx = self.index_spinner.value()
+        data = self.current_data[idx]
+
+        super_row = self.super_classes[self.current_dataset_name].iloc[idx]
+        sub_row = self.sub_classes[self.current_dataset_name].iloc[idx]
+
+        super_labels = self.decode_multilabel(super_row, self.super_label_names)
+        sub_labels = self.decode_multilabel(sub_row, self.sub_label_names)
+
+        self.figure.clear()
+        T, C = data.shape
+        fft_data = np.fft.fft(data, axis=0)[:data.shape[0] // 2, :].squeeze()
+        freqs = np.fft.fftfreq(T, d=1/T)[:T // 2]
+        magnitude = np.abs(fft_data).squeeze()
+        for i in range(C):
+            rows, cols = 4, 3
+            row = i % rows
+            col = i // rows
+            ax = self.figure.add_subplot(rows, cols, row * cols + col + 1)
+            freqs = np.fft.fftfreq(T).squeeze()
+            ax.plot(magnitude[:, i], linewidth=0.8)
             ax.set_title(f"Lead {lead_dict[i]}", fontsize=12)
             ax.set_xticks([])
             ax.set_yticks([])
@@ -292,7 +341,18 @@ class ECGViewer(QWidget):
                 self.plot_selected_labels()
         except ValueError:
             pass
-
+    
+    def toggle_filtered(self):
+        self.show_filtered = not self.show_filtered
+        self.plot_selected_labels()
+    
+    def filter_signal(self, signal_data, fs=100, lowcut=0.5, highcut=45.0):
+        nyquist = 0.5 * fs
+        low = lowcut / nyquist
+        high = highcut / nyquist
+        b, a = signal.butter(4, [low, high], btype='band')
+        return signal.filtfilt(b, a, signal_data, axis=0)    
+        
     def go_to_next_sample(self):
         self.update_available_samples()
         current_idx = self.index_spinner.value()
