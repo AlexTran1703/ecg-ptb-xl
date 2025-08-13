@@ -35,8 +35,15 @@ def detect_r_peaks(ecg_, fs=100, length={"begin": 0, "end": 1000}, plot=False):
     integrated = np.convolve(squared, np.ones(window_size) / window_size, mode='same')
 
     # Step 4: Simple adaptive thresholding and refractory period
-    threshold = np.mean(integrated) * 1.5
-    refractory_period = int(0.10 * fs)  # 250 ms
+    #threshold = np.mean(integrated) * 1.5
+    init_window_sec = 2  # use first 2 seconds
+    init_samples = min(len(integrated), init_window_sec * fs)
+    signal_level = np.percentile(integrated[:init_samples], 98) * 0.25
+    threshold = signal_level
+    # Refractory period to avoid multiple detections
+    # 250 ms refractory period
+    
+    refractory_period = int(0.25 * fs)  # 250 ms
 
     peaks = []
     last_peak = -refractory_period
@@ -63,3 +70,4 @@ def detect_r_peaks(ecg_, fs=100, length={"begin": 0, "end": 1000}, plot=False):
         plt.grid()
         plt.show()
     return np.array(peaks), integrated, squared, diff
+

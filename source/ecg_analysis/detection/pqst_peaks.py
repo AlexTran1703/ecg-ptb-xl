@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.signal import savgol_filter
 import matplotlib.pyplot as plt
+from utils.utils import average_rr_seconds, rr_scaled_durations
 
 """" 
 Based on lead II only
@@ -34,10 +35,11 @@ def detect_pqst(signal, r_peaks, fs=100, smoothing_filter_config={"window_length
     deriv = np.gradient(smoothed)
 
     P_waves, Q_waves, S_waves, T_waves = [], [], [], []
-    duration = {"P": 0.3,
-                 "Q": 0.06,
-                 "S": 0.06,
-                 "T": 0.4}
+    # duration = {"P": 0.3,
+    #              "Q": 0.06,
+    #              "S": 0.06,
+    #              "T": 0.2}
+    duration = rr_scaled_durations(average_rr_seconds(r_peaks, fs))
     if plot:
         colors = ["blue", "orange", "purple", "brown"]
         labels = ["P peak", "Q point", "S point", "T peak"]
@@ -61,7 +63,7 @@ def detect_pqst(signal, r_peaks, fs=100, smoothing_filter_config={"window_length
         q_search_start = max(0, r - int(duration["Q"] * fs))  # 50 ms before R
         q_search_end   = r
         if q_search_end > q_search_start:
-            q_idx_rel = np.argmin(deriv[q_search_start:q_search_end])
+            q_idx_rel = np.argmin(smoothed[q_search_start:q_search_end])
             q_idx = q_search_start + q_idx_rel
             Q_waves.append(q_idx)
         else:
@@ -73,7 +75,7 @@ def detect_pqst(signal, r_peaks, fs=100, smoothing_filter_config={"window_length
         s_search_end = min(len(smoothed), r + int(duration["S"] * fs))
         
         if s_search_end > s_search_start:  # Check if the window is valid
-            s_idx_rel = np.argmax(deriv[s_search_start:s_search_end])
+            s_idx_rel = np.argmin(deriv[s_search_start:s_search_end])
             s_idx = s_search_start + s_idx_rel
             S_waves.append(s_idx)
         else:
