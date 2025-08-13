@@ -2,3 +2,5 @@ dataset/
 .venv/
 *log*
 *data_source*
+*__pycache__
+*.pyc  
